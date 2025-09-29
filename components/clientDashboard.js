@@ -195,6 +195,7 @@ export default function ClientDashboard() {
   const [roomId, setRoomId] = useState(null);
   const [mounted, setMounted] = useState(false);
   const [error, setError] = useState("");
+  const [statusUpdates, setStatusUpdates] = useState([]);
   const [editingDocId, setEditingDocId] = useState(null);
   const [editingContent, setEditingContent] = useState("");
   
@@ -252,6 +253,12 @@ export default function ClientDashboard() {
             setError(`Failed to load SRS: ${data.error}`);
             console.error("API Error:", data.error);
           }
+          // Fetch manager status updates
+          try {
+            const stRes = await fetch(`/api/project-status?roomId=${userRoomId}`);
+            const stData = await stRes.json();
+            if (stData.success) setStatusUpdates(stData.statuses || []);
+          } catch (_) {}
         } catch (err) {
           setError("Network error loading SRS documents");
           console.error("Fetch error:", err);
@@ -436,6 +443,12 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
         if (refreshData.success) {
           setSrsDocs(refreshData.srsDocuments || []);
         }
+        // Refresh status updates
+        try {
+          const stRes = await fetch(`/api/project-status?roomId=${roomId}`);
+          const stData = await stRes.json();
+          if (stData.success) setStatusUpdates(stData.statuses || []);
+        } catch (_) {}
 
         setNewContent("");
         setTitle("");
@@ -484,6 +497,12 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
       if (refreshData.success) {
         setSrsDocs(refreshData.srsDocuments || []);
       }
+      // Refresh status updates
+      try {
+        const stRes = await fetch(`/api/project-status?roomId=${roomId}`);
+        const stData = await stRes.json();
+        if (stData.success) setStatusUpdates(stData.statuses || []);
+      } catch (_) {}
       cancelEdit();
     } catch (err) {
       setError("Error updating SRS document");
@@ -500,6 +519,30 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}
+        </div>
+      )}
+
+      {/* Manager Progress Updates */}
+      <h2 className="text-xl font-semibold mt-8 mb-2">Project Progress</h2>
+      {statusUpdates.length === 0 ? (
+        <p className="text-gray-500">No progress updates yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {statusUpdates.map((u) => (
+            <div key={u._id} className="border rounded p-3 bg-white">
+              <div className="flex justify-between text-sm text-gray-600 mb-1">
+                <span>By: {u.updatedBy?.name || u.updatedBy?.email || 'Unknown'}</span>
+                <span>{new Date(u.createdAt).toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-3 mb-1">
+                <span className="font-semibold">Progress:</span>
+                <span>{u.progressPercent}%</span>
+              </div>
+              {u.comment && (
+                <p className="text-gray-800 whitespace-pre-wrap">{u.comment}</p>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
