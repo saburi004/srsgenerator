@@ -208,6 +208,106 @@ export default function ClientDashboard() {
   const [optionalRequirements, setOptionalRequirements] = useState([]);
   const [selectedOptional, setSelectedOptional] = useState([]);
 
+  // Clarification chat states
+  const [isClarifyOpen, setIsClarifyOpen] = useState(false);
+  const [clarifyQuestions, setClarifyQuestions] = useState([]);
+  const [clarifyAnswers, setClarifyAnswers] = useState({});
+  const [isClarifying, setIsClarifying] = useState(false);
+  const [isSavingWithClarifications, setIsSavingWithClarifications] = useState(false);
+
+  const handleClarifyAnswerChange = (index, value) => {
+    setClarifyAnswers((prev) => ({ ...prev, [index]: value }));
+  };
+
+  const buildFinalContentWithClarifications = () => {
+    // Build base content as before
+    const base = `
+# ${generatedSRS.title}
+
+## Project Overview
+${generatedSRS.overview}
+
+## Functional Requirements
+${generatedSRS.functionalRequirements.map((req, i) => `${i + 1}. ${req}`).join('\n')}
+
+## Non-Functional Requirements
+${generatedSRS.nonFunctionalRequirements.map((req, i) => `${i + 1}. ${req}`).join('\n')}
+
+## Technical Stack
+${generatedSRS.technicalStack ? generatedSRS.technicalStack.join(', ') : 'To be determined'}
+
+## Color Theme
+Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
+`.trim();
+
+    const answeredPairs = clarifyQuestions
+      .map((q, i) => ({ q, a: (clarifyAnswers[i] || '').trim() }))
+      .filter((p) => p.a.length > 0);
+
+    if (answeredPairs.length === 0) return base;
+
+    const qaSection = `
+\n## Client Clarifications\n${answeredPairs
+      .map((p, i) => `${i + 1}. Q: ${p.q}\n   A: ${p.a}`)
+      .join('\n')}`;
+    return `${base}${qaSection}`;
+  };
+
+  const saveSrsAfterClarifications = async () => {
+    if (!generatedSRS || !token || !roomId) {
+      alert("Missing data to save SRS");
+      return;
+    }
+    setIsSavingWithClarifications(true);
+    setError("");
+    try {
+      const finalContent = buildFinalContentWithClarifications();
+      const res = await fetch("/api/srs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          roomId,
+          content: finalContent,
+          title: generatedSRS.title
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        setError(`Failed to create SRS: ${data.error}`);
+        setIsSavingWithClarifications(false);
+        return;
+      }
+
+      const refreshRes = await fetch(`/api/srs/room/${roomId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const refreshData = await refreshRes.json();
+      if (refreshData.success) {
+        setSrsDocs(refreshData.srsDocuments || []);
+      }
+
+      // Reset AI generator and clarification states
+      setShowAIGenerator(false);
+      setAiPrompt("");
+      setGeneratedSRS(null);
+      setOptionalRequirements([]);
+      setSelectedOptional([]);
+      setIsClarifyOpen(false);
+      setClarifyQuestions([]);
+      setClarifyAnswers({});
+      alert("SRS saved with clarifications!");
+    } catch (err) {
+      setError("Error saving SRS with clarifications");
+      console.error("Save SRS clarifications error:", err);
+    } finally {
+      setIsSavingWithClarifications(false);
+    }
+  };
+
   const colorThemes = [
     { name: "blue", primary: "#3B82F6", secondary: "#DBEAFE", text: "Blue Ocean" },
     { name: "green", primary: "#10B981", secondary: "#D1FAE5", text: "Fresh Green" },
@@ -369,44 +469,41 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
 
     try {
       setError("");
-      const res = await fetch("/api/srs", {
+
+      // First, open clarification panel and fetch questions from GROQ
+      setIsClarifyOpen(true);
+      setIsClarifying(true);
+      setClarifyQuestions([]);
+      setClarifyAnswers({});
+
+      // Ask GROQ for clarification questions
+      const clarifyRes = await fetch("/api/groq/clarify", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          roomId,
-          content: formattedContent,
-          title: generatedSRS.title
-        }),
+          srs: {
+            title: generatedSRS.title,
+            overview: generatedSRS.overview,
+            functionalRequirements: finalRequirements.functionalRequirements,
+            nonFunctionalRequirements: finalRequirements.nonFunctionalRequirements,
+            technicalStack: generatedSRS.technicalStack || []
+          }
+        })
       });
-
-      const data = await res.json();
-
-      if (data.success) {
-        const refreshRes = await fetch(`/api/srs/room/${roomId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const refreshData = await refreshRes.json();
-
-        if (refreshData.success) {
-          setSrsDocs(refreshData.srsDocuments || []);
-        }
-
-        // Reset AI generator
-        setShowAIGenerator(false);
-        setAiPrompt("");
-        setGeneratedSRS(null);
-        setOptionalRequirements([]);
-        setSelectedOptional([]);
-        alert("AI-generated SRS document created successfully!");
-      } else {
-        setError(`Failed to create SRS: ${data.error}`);
+      const clarifyData = await clarifyRes.json();
+      if (!clarifyData.success) {
+        setError(`Failed to get clarification questions: ${clarifyData.error || 'Unknown error'}`);
+        setIsClarifying(false);
+        return;
       }
+      setClarifyQuestions(clarifyData.questions || []);
+      setIsClarifying(false);
+
+      // Defer saving SRS until client answers clarifications. A separate handler will compile and save.
     } catch (err) {
-      setError("Error creating SRS document");
-      console.error("Create SRS error:", err);
+      setError("Error starting clarification phase");
+      console.error("Clarification start error:", err);
+      setIsClarifying(false);
     }
   };
 
@@ -513,7 +610,7 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
   if (!mounted || loading) return <p>Loading...</p>;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto relative">
       <h1 className="text-3xl font-bold mb-6">Client Dashboard - Room: {roomId}</h1>
 
       {error && (
@@ -751,7 +848,7 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
                   onClick={createSrsFromAI}
                   className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition"
                 >
-                  ✓ Create SRS Document
+                  ✓ Continue to Clarifications
                 </button>
                 <button
                   onClick={() => {
@@ -845,6 +942,62 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
           </div>
         ))
       )}
+      {/* Clarification Drawer */}
+      {isClarifyOpen && (
+        <div className="fixed top-0 right-0 h-full w-full md:w-[420px] bg-white shadow-2xl border-l overflow-y-auto z-40">
+          <div className="p-4 border-b flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Clarifications</h3>
+            <button
+              onClick={() => setIsClarifyOpen(false)}
+              className="text-gray-600 hover:text-gray-900 border px-3 py-1 rounded"
+            >
+              Close
+            </button>
+          </div>
+          <div className="p-4 space-y-4">
+            {isClarifying ? (
+              <div className="text-sm text-gray-600">Generating questions...</div>
+            ) : clarifyQuestions.length === 0 ? (
+              <div className="text-sm text-gray-600">No questions generated.</div>
+            ) : (
+              <div className="space-y-5">
+                {clarifyQuestions.map((q, idx) => (
+                  <div key={idx} className="border rounded p-3 bg-gray-50">
+                    <p className="text-sm font-medium mb-2">{q}</p>
+                    <textarea
+                      value={clarifyAnswers[idx] || ""}
+                      onChange={(e) => handleClarifyAnswerChange(idx, e.target.value)}
+                      className="w-full border rounded p-2 h-20"
+                      placeholder="Your answer..."
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="pt-2 flex gap-2">
+              <button
+                onClick={saveSrsAfterClarifications}
+                disabled={isSavingWithClarifications}
+                className="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
+              >
+                {isSavingWithClarifications ? 'Saving...' : 'Save SRS with Clarifications'}
+              </button>
+              <button
+                onClick={() => {
+                  // Allow saving without answers by keeping questions empty
+                  saveSrsAfterClarifications();
+                }}
+                disabled={isSavingWithClarifications}
+                className="px-4 py-2 rounded border hover:bg-gray-100"
+              >
+                Skip & Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
