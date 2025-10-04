@@ -1858,7 +1858,7 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
                 <button
                   onClick={saveSrsAfterClarifications}
                   disabled={isSavingWithClarifications}
-                  className="w-full text-white px-6 py-4 rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl disabled:opacity-50"
+                  className="w-full text-white px-6 py-4 rounded-xl fdbont-bold transition-all shadow-xl hover:shadow-2xl disabled:opacity-50"
                   style={{background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)'}}
                 >
                   {isSavingWithClarifications ? (

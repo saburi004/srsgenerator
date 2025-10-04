@@ -1,36 +1,84 @@
-// pages/api/rooms/[roomId]/route.js
+// // pages/api/rooms/[roomId]/route.js
+// import connectDB from "@/lib/dbconfig";
+// import Room from "@/models/room";
+
+// export default async function handler(req, res) {
+//   await connectDB();
+
+//   const { roomId } = req.query;
+
+//   if (req.method === "GET") {
+//     try {
+//       const room = await Room.findOne({ roomId })
+//         .populate('clients')
+//         .populate('developers')
+//         .populate('srsDocuments')
+//         .populate('statusUpdates')
+//         .populate({
+//           path: 'srsDocuments',
+//           populate: {
+//             path: 'versions.author',
+//             model: 'User'
+//           }
+//         });
+
+//       if (!room) {
+//         return res.status(404).json({ success: false, error: "Room not found" });
+//       }
+
+//       res.status(200).json({ success: true, room });
+//     } catch (error) {
+//       res.status(500).json({ success: false, error: error.message });
+//     }
+//   } else {
+//     res.status(405).json({ success: false, error: "Method not allowed" });
+//   }
+// }
+// app/api/rooms/[roomId]/route.js
 import connectDB from "@/lib/dbconfig";
 import Room from "@/models/room";
+import { NextResponse } from "next/server";
 
-export default async function handler(req, res) {
+export async function GET(request, { params }) {
   await connectDB();
 
-  const { roomId } = req.query;
+  // Await the params first
+  const { roomId } = await params;
 
-  if (req.method === "GET") {
-    try {
-      const room = await Room.findOne({ roomId })
-        .populate('clients')
-        .populate('developers')
-        .populate('srsDocuments')
-        .populate('statusUpdates')
-        .populate({
-          path: 'srsDocuments',
-          populate: {
-            path: 'versions.author',
-            model: 'User'
-          }
-        });
+  try {
+    const room = await Room.findOne({ roomId })
+      .populate('clients')
+      .populate('developers')
+      .populate('srsDocuments')
+      .populate('statusUpdates')
+      .populate({
+        path: 'srsDocuments',
+        populate: {
+          path: 'versions.author',
+          model: 'User'
+        }
+      });
 
-      if (!room) {
-        return res.status(404).json({ success: false, error: "Room not found" });
-      }
-
-      res.status(200).json({ success: true, room });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+    if (!room) {
+      return NextResponse.json(
+        { success: false, error: "Room not found" },
+        { status: 404 }
+      );
     }
-  } else {
-    res.status(405).json({ success: false, error: "Method not allowed" });
+
+    return NextResponse.json({ success: true, room });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
+}
+
+// Add other methods if needed
+export async function POST(request, { params }) {
+  return NextResponse.json(
+    { success: false, error: "Method not allowed" },
+    { status: 405 }
+  );
 }
