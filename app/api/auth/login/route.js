@@ -8,28 +8,48 @@ export async function POST(request) {
   try {
     const { email, name, role, roomId } = await request.json();
 
-    if (!email || !role) {
-      return Response.json({ success: false, error: "Email and role are required" }, { status: 400 });
+    if (!email) {
+      return Response.json({ success: false, error: "Email is required" }, { status: 400 });
     }
 
+    // Find existing user or create with sensible defaults
     let user = await User.findOne({ email });
     if (!user) {
       const inferredName = name || email.split('@')[0];
-      user = await User.create({ email, name: inferredName, role });
+      const resolvedRole = role || 'client';
+      user = await User.create({ email, name: inferredName, role: resolvedRole });
     } else if (role && user.role !== role) {
-      // Keep initial role if already set; simple approach
+      // Keep existing role; do not overwrite silently
     }
 
+    // Optionally attach the user to a room if provided
     let assignedRoomId = roomId || null;
     if (assignedRoomId) {
       const room = await Room.findOne({ roomId: assignedRoomId });
       if (!room) {
         return Response.json({ success: false, error: "Room not found" }, { status: 404 });
       }
+
+      // Add membership based on user's role if not already present
+      const isClient = room.clients.some(id => id.equals(user._id));
+      const isDeveloper = room.developers.some(id => id.equals(user._id));
+      const isManager = room.manager && room.manager.equals(user._id);
+
+      if (!isClient && !isDeveloper && !isManager) {
+        if (user.role === 'client') {
+          room.clients.push(user._id);
+          await room.save();
+        } else if (user.role === 'developer') {
+          room.developers.push(user._id);
+          await room.save();
+        }
+        // If user.role === 'manager', do not auto-promote unless already manager
+      }
     }
 
     const token = jwt.sign(
       {
+        userId: String(user._id),
         email: user.email,
         name: user.name || email.split('@')[0],
         role: user.role,

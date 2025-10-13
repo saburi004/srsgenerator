@@ -42,8 +42,7 @@ import { NextResponse } from "next/server";
 export async function GET(request, { params }) {
   await connectDB();
 
-  // Await the params first
-  const { roomId } = await params;
+  const { roomId } = params;
 
   try {
     const room = await Room.findOne({ roomId })

@@ -3024,46 +3024,57 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
     
     setToken(storedToken);
     
-    try {
-      const payload = JSON.parse(atob(storedToken.split(".")[1]));
-      const userRoomId = payload.roomId;
-      setRoomId(userRoomId);
+    (async () => {
+      try {
+        const payload = JSON.parse(atob(storedToken.split(".")[1]));
+        const storedCurrent = localStorage.getItem('currentRoomId');
+        const selectedRoomId = (storedCurrent || payload.roomId || '').toUpperCase();
 
-      const fetchSrs = async () => {
-        try {
-          setError("");
-          const res = await fetch(`/api/srs/room/${userRoomId}`, {
-            headers: { Authorization: `Bearer ${storedToken}` },
-          });
-          
-          const data = await res.json();
-          console.log("API Response:", data);
-          
-          if (data.success) {
-            setSrsDocs(data.srsDocuments || []);
-          } else {
-            setError(`Failed to load SRS: ${data.error}`);
-            console.error("API Error:", data.error);
+        if (selectedRoomId) {
+          setRoomId(selectedRoomId);
+          if (!storedCurrent) {
+            localStorage.setItem('currentRoomId', selectedRoomId);
           }
-          try {
-            const stRes = await fetch(`/api/project-status?roomId=${userRoomId}`);
-            const stData = await stRes.json();
-            if (stData.success) setStatusUpdates(stData.statuses || []);
-          } catch (_) {}
-        } catch (err) {
-          setError("Network error loading SRS documents");
-          console.error("Fetch error:", err);
-        } finally {
-          setLoading(false);
-        }
-      };
 
-      fetchSrs();
-    } catch (err) {
-      console.error("Error parsing token:", err);
-      localStorage.removeItem("token");
-      window.location.href = "/register";
-    }
+          // Load SRS and status for the selected room
+          try {
+            setError("");
+            const res = await fetch(`/api/srs/room/${selectedRoomId}`, {
+              headers: { Authorization: `Bearer ${storedToken}` },
+            });
+
+            const data = await res.json();
+            console.log("API Response:", data);
+
+            if (data.success) {
+              setSrsDocs(data.srsDocuments || []);
+            } else {
+              setError(`Failed to load SRS: ${data.error}`);
+              console.error("API Error:", data.error);
+            }
+            try {
+              const stRes = await fetch(`/api/project-status?roomId=${selectedRoomId}`);
+              const stData = await stRes.json();
+              if (stData.success) setStatusUpdates(stData.statuses || []);
+            } catch (_) {}
+          } catch (err) {
+            setError("Network error loading SRS documents");
+            console.error("Fetch error:", err);
+          } finally {
+            setLoading(false);
+          }
+        } else {
+          // No room in token or storage; load profile so user can pick a room
+          setLoading(false);
+          setActiveSection("home");
+          fetchUserData();
+        }
+      } catch (err) {
+        console.error("Error parsing token:", err);
+        localStorage.removeItem("token");
+        window.location.href = "/register";
+      }
+    })();
   }, [mounted]);
 
   const generateSRSWithAI = async () => {
@@ -3245,6 +3256,57 @@ Primary: ${colorThemes.find(t => t.name === selectedTheme)?.text}
     }
   };
 
+  // Allow client to join/switch a room similar to developer flow
+  const joinRoom = async (roomIdToJoin) => {
+    if (!token || !roomIdToJoin || !userData?.user?.email) return;
+
+    try {
+      const response = await fetch(`/api/rooms/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          roomId: roomIdToJoin,
+          userEmail: userData.user.email,
+          userType: 'client',
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        if (data.token) {
+          localStorage.setItem('token', data.token);
+          setToken(data.token);
+        }
+        setRoomId(roomIdToJoin);
+        localStorage.setItem('currentRoomId', roomIdToJoin);
+        // reload room data for new room
+        try {
+          const srsRes = await fetch(`/api/srs/room/${roomIdToJoin}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const srsData = await srsRes.json();
+          if (srsData.success) setSrsDocs(srsData.srsDocuments || []);
+        } catch (_) {}
+        try {
+          const stRes = await fetch(`/api/project-status?roomId=${roomIdToJoin}`);
+          const stData = await stRes.json();
+          if (stData.success) setStatusUpdates(stData.statuses || []);
+        } catch (_) {}
+        setActiveSection('progress');
+      }
+    } catch (err) {
+      console.error('Join room error (client):', err);
+      // Fallback to just set the room locally
+      setRoomId(roomIdToJoin);
+      localStorage.setItem('currentRoomId', roomIdToJoin);
+      setActiveSection('progress');
+    }
+  };
+
   const startEdit = (doc) => {
     setEditingDocId(doc._id);
     const latest = doc.versions[doc.versions.length - 1];
@@ -3414,6 +3476,129 @@ useEffect(() => {
       {/* Main Content */}
       <div className="flex-1 p-6">
         <div className="max-w-6xl mx-auto">
+          {/* Home/Profile Section */}
+          {activeSection === "home" && (
+            <div className="space-y-6">
+              {/* Profile Card */}
+              <div className="backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-white/20" style={{background: 'linear-gradient(135deg, #1a0f2e 0%, #2d1b4e 100%)'}}>
+                <div className="flex justify-between items-start mb-6">
+                  <h2 className="text-3xl font-bold text-white">Client Profile</h2>
+                  <button
+                    onClick={fetchUserData}
+                    disabled={homeLoading}
+                    className="px-6 py-2 rounded-xl font-bold backdrop-blur-sm bg-white/20 transition-all shadow-lg hover:shadow-xl border-2 border-white/30 text-white disabled:opacity-50"
+                  >
+                    {homeLoading ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
+
+                {homeLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin text-4xl mb-3 text-white">⚙️</div>
+                    <p className="text-purple-200">Loading user data...</p>
+                  </div>
+                ) : userData ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="backdrop-blur-sm bg-white/10 rounded-xl p-6 border border-white/20">
+                      <h3 className="text-xl font-bold mb-4 text-white">Personal Information</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-sm font-semibold text-purple-200">Name</label>
+                          <p className="text-white text-lg">{userData.user.name || "Not provided"}</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-semibold text-purple-200">Email</label>
+                          <p className="text-white text-lg">{userData.user.email}</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-semibold text-purple-200">Role</label>
+                          <p className="text-white text-lg capitalize">{userData.user.role}</p>
+                        </div>
+                        {roomId && (
+                          <div>
+                            <label className="text-sm font-semibold text-purple-200">Current Room</label>
+                            <p className="text-white text-lg">{roomId}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="backdrop-blur-sm bg-white/10 rounded-xl p-6 border border-white/20">
+                      <h3 className="text-xl font-bold mb-4 text-white">Project Statistics</h3>
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-purple-200">Total Rooms</span>
+                          <span className="text-white font-bold text-xl">{userData.rooms.length}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-purple-200">User Role</span>
+                          <span className="text-white font-bold text-xl capitalize">{userData.user.role}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-purple-200 mb-4">No user data loaded yet</p>
+                    <button
+                      onClick={fetchUserData}
+                      className="text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all"
+                      style={{background: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)'}}
+                    >
+                      Load My Data
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Rooms List */}
+              {userData && userData.rooms.length > 0 && (
+                <div className="backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-white/20" style={{background: 'linear-gradient(135deg, #1a0f2e 0%, #2d1b4e 100%)'}}>
+                  <h3 className="text-2xl font-bold mb-6 text-white">Your Rooms ({userData.rooms.length})</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {userData.rooms.map((room) => (
+                      <div 
+                        key={room.id} 
+                        className={`backdrop-blur-sm bg-white/10 rounded-xl p-6 border transition-transform ${
+                          room.roomId === roomId ? 'border-purple-400 scale-105 shadow-lg' : 'border-white/20 hover:scale-105'
+                        }`}
+                      >
+                        <h4 className="font-bold text-lg mb-3 text-white">Room: {room.roomId}</h4>
+                        {room.roomId === roomId && (
+                          <div className="mb-3">
+                            <span className="bg-purple-500/30 text-purple-200 text-xs font-bold px-2 py-1 rounded-full">
+                              Current Room
+                            </span>
+                          </div>
+                        )}
+                        <div className="space-y-2 text-sm">
+                          <div>
+                            <span className="text-purple-200">Manager:</span>
+                            <p className="text-white font-semibold">{room.manager?.name || room.manager?.email}</p>
+                          </div>
+                          <div>
+                            <span className="text-purple-200">Clients:</span>
+                            <p className="text-white">{room.clients?.length > 0 ? room.clients.map(c => c.name || c.email).join(', ') : 'No clients'}</p>
+                          </div>
+                          <div>
+                            <span className="text-purple-200">Developers:</span>
+                            <p className="text-white">{room.developers?.length > 0 ? room.developers.map(d => d.name || d.email).join(', ') : 'No developers'}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => joinRoom(room.roomId)}
+                          className="w-full mt-4 text-white px-4 py-2 rounded-lg font-bold transition-all shadow-lg"
+                          style={{background: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)'}}
+                        >
+                          {room.roomId === roomId ? 'Current Room' : 'Switch to this Room'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {error && (
             <div className="bg-red-100/90 backdrop-blur-sm border-2 border-red-400 text-red-700 px-6 py-4 rounded-xl mb-6 shadow-lg">
               {error}

@@ -5,7 +5,7 @@ import Room from '@/models/room';
 import SrsDocument from '@/models/srs';
 import connectDB from "@/lib/dbconfig";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 export async function GET(request) {
   try {

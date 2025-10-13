@@ -77,7 +77,7 @@ import "@/models/srs";
 import "@/models/project"; // ProjectStatus model
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "supersecret"; // ⚠️ set in .env.local
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 
 export async function POST(req) {
   await connectDB();
@@ -103,30 +103,29 @@ export async function POST(req) {
       });
     }
 
-    // Check if user is already in the room
+    // Check if user is already in the room (idempotent join)
     const isClient = room.clients.includes(user._id);
     const isDeveloper = room.developers.includes(user._id);
 
-    if (isClient || isDeveloper) {
-      return Response.json(
-        { success: false, error: "User already in this room" },
-        { status: 400 }
-      );
+    let membershipChanged = false;
+    if (!isClient && !isDeveloper) {
+      // Add user based on type
+      if (userType === "client") {
+        room.clients.push(user._id);
+        membershipChanged = true;
+      } else if (userType === "developer") {
+        room.developers.push(user._id);
+        membershipChanged = true;
+      } else {
+        return Response.json(
+          { success: false, error: "Invalid user type" },
+          { status: 400 }
+        );
+      }
+      if (membershipChanged) {
+        await room.save();
+      }
     }
-
-    // Add user based on type
-    if (userType === "client") {
-      room.clients.push(user._id);
-    } else if (userType === "developer") {
-      room.developers.push(user._id);
-    } else {
-      return Response.json(
-        { success: false, error: "Invalid user type" },
-        { status: 400 }
-      );
-    }
-
-    await room.save();
 
     const populatedRoom = await Room.findOne({ roomId })
       .populate("manager")
@@ -151,7 +150,7 @@ export async function POST(req) {
       success: true,
       room: populatedRoom,
       token, // frontend can save this
-      message: `Joined room as ${userType}`,
+      message: isClient || isDeveloper ? `Already a member, switched to room ${roomId}` : `Joined room as ${userType}`,
     });
   } catch (error) {
     return Response.json({ success: false, error: error.message }, { status: 500 });

@@ -116,6 +116,9 @@ export default function Home() {
       const data = await res.json();
       if (!data.success) { setError(data.error || "Login failed"); return; }
       localStorage.setItem("token", data.token);
+      if (roomId) {
+        localStorage.setItem('currentRoomId', roomId.toUpperCase());
+      }
       if (role === "manager") router.push("/dashboard/manager");
       else if (role === "developer") router.push("/dashboard/developer");
       else router.push("/dashboard/client");

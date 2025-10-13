@@ -98,8 +98,7 @@ export async function GET(request, { params }) {
   await connectDB();
 
   try {
-    // FIX: Add await here
-    const { roomId } = await params;
+    const { roomId } = params;
     
     console.log("GET SRS for Room ID:", roomId);
     
