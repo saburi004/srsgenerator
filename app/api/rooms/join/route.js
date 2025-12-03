@@ -106,15 +106,20 @@ export async function POST(req) {
     // Check if user is already in the room (idempotent join)
     const isClient = room.clients.includes(user._id);
     const isDeveloper = room.developers.includes(user._id);
+    const isManager = room.manager && room.manager.equals(user._id);
 
     let membershipChanged = false;
-    if (!isClient && !isDeveloper) {
+    if (!isClient && !isDeveloper && !isManager) {
       // Add user based on type
       if (userType === "client") {
         room.clients.push(user._id);
         membershipChanged = true;
       } else if (userType === "developer") {
         room.developers.push(user._id);
+        membershipChanged = true;
+      } else if (userType === "manager") {
+        // Allow joining as manager (one manager per room)
+        room.manager = user._id;
         membershipChanged = true;
       } else {
         return Response.json(
@@ -150,7 +155,9 @@ export async function POST(req) {
       success: true,
       room: populatedRoom,
       token, // frontend can save this
-      message: isClient || isDeveloper ? `Already a member, switched to room ${roomId}` : `Joined room as ${userType}`,
+      message: (isClient || isDeveloper || isManager) && !membershipChanged
+        ? `Already a member, switched to room ${roomId}`
+        : `Joined room as ${userType}`,
     });
   } catch (error) {
     return Response.json({ success: false, error: error.message }, { status: 500 });

@@ -124,15 +124,49 @@ export default function RegisterPage() {
     }
   };
 
-  const handleCreateRoom = (e) => {
+  const handleCreateRoom = async (e) => {
     e.preventDefault();
-    console.log("Creating room:", newRoomName);
-    setShowCreateRoom(false);
-    setNewRoomName("");
+
+    if (!email) {
+      setMessage("⚠️ Please enter your email above before creating a room.");
+      return;
+    }
+
+    try {
+      setMessage("");
+
+      const res = await fetch("/api/rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ managerEmail: email }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        setMessage(data.error || "⚠️ Failed to create room");
+        return;
+      }
+
+      const createdRoomId = data.room?.roomId;
+
+      if (createdRoomId) {
+        setRoomId(createdRoomId);
+        setMessage(`✅ Room created successfully. Room ID: ${createdRoomId}`);
+      } else {
+        setMessage("✅ Room created, but room ID was not returned.");
+      }
+
+      setShowCreateRoom(false);
+      setNewRoomName("");
+    } catch (error) {
+      console.error("Error creating room:", error);
+      setMessage("⚠️ Something went wrong while creating the room.");
+    }
   };
 
   return (
-    <div className="relative flex items-center justify-center min-h-screen bg-gradient-to-br from-[#3E1E68] via-[#5D2F77] to-[#3E1E68] overflow-hidden">
+    <div className="relative flex items-center justify-center min-h-screen bg-gradient-to-br from-[#3E1E68] via-[#5D2F77] to-[#3E1E68] overflow-hidden text-black">
       <style>{`
         @keyframes shimmer {
           0% { background-position: 200% 0; }
@@ -201,7 +235,7 @@ export default function RegisterPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full bg-black bg-opacity-30 border border-[#5D2F77] rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-[#FFACAC] focus:ring-2 focus:ring-[#FFACAC] focus:ring-opacity-50 transition-all duration-300"
+                  className="w-full bg-opacity-30 border border-[#5D2F77] rounded-xl px-4 py-3 text-black placeholder-gray-400 focus:outline-none focus:border-[#FFACAC] focus:ring-2 focus:ring-[#FFACAC] focus:ring-opacity-50 transition-all duration-300"
                   placeholder="you@example.com"
                 />
               </div>
@@ -213,7 +247,7 @@ export default function RegisterPage() {
                   value={roomId}
                   onChange={(e) => setRoomId(e.target.value)}
                   required
-                  className="w-full bg-black bg-opacity-30 border border-[#5D2F77] rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-[#FFACAC] focus:ring-2 focus:ring-[#FFACAC] focus:ring-opacity-50 transition-all duration-300"
+                  className="w-full bg-black bg-opacity-30 border border-[#5D2F77] rounded-xl px-4 py-3 text-[#0000] placeholder-gray-400 focus:outline-none focus:border-[#FFACAC] focus:ring-2 focus:ring-[#FFACAC] focus:ring-opacity-50 transition-all duration-300"
                   placeholder="Enter room ID"
                 />
               </div>
@@ -223,7 +257,7 @@ export default function RegisterPage() {
                 <select
                   value={userType}
                   onChange={(e) => setUserType(e.target.value)}
-                  className="w-full bg-black bg-opacity-30 border border-[#5D2F77] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FFACAC] focus:ring-2 focus:ring-[#FFACAC] focus:ring-opacity-50 transition-all duration-300 cursor-pointer"
+                  className="w-full bg-black bg-opacity-30 border border-[#5D2F77] rounded-xl px-4 py-3 text-black focus:outline-none focus:border-[#FFACAC] focus:ring-2 focus:ring-[#FFACAC] focus:ring-opacity-50 transition-all duration-300 cursor-pointer"
                 >
                   <option value="client" className="bg-[#3E1E68]">Client</option>
                   <option value="developer" className="bg-[#3E1E68]">Developer</option>

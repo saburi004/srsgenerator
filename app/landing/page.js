@@ -1,10 +1,10 @@
 
-import Register from '@/components/registration';
+import Landing from '@/components/landing';
 
 export default function Page() {
   return (
     <div>
-      <Register />
+      <Landing />
     </div>
   );
 }

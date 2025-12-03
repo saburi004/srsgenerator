@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { Groq } from "groq-sdk";
 
+
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const qdrant = new QdrantClient({ url: process.env.QDRANT_URL || "http://localhost:6333" });
 
@@ -151,7 +152,7 @@ async function searchSimilarDocuments(query, roomId, k = 3) {
       vector: queryEmbedding,
       limit: k,
       with_payload: true,
-      score_threshold: 0.0 // Changed from 0.1 to 0.0 to get all results
+      score_threshold: 0.0 
     });
 
     console.log(`Search found ${searchResult.length} results with scores:`, 

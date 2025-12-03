@@ -42,8 +42,11 @@ export async function POST(request) {
         } else if (user.role === 'developer') {
           room.developers.push(user._id);
           await room.save();
+        } else if (user.role === 'manager') {
+          // Ensure this user becomes the manager for this room
+          room.manager = user._id;
+          await room.save();
         }
-        // If user.role === 'manager', do not auto-promote unless already manager
       }
     }
 
