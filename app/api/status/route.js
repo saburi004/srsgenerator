@@ -1,6 +1,6 @@
 // pages/api/status/route.js
 import connectDB from "@/lib/dbconfig";
-import ProjectStatus from "@/models/projectStatus";
+// import ProjectStatus from "@/models/projectStatus";
 import Room from "@/models/room";
 import User from "@/models/user";
 
