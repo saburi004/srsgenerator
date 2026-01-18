@@ -211,7 +211,7 @@ export default function RegisterPage() {
               >
                 Login
               </button>
-              <button
+              {/* <button
                 onClick={() => setActiveTab("register")}
                 className={`flex-1 py-3 px-6 rounded-lg font-semibold transition-all duration-300 ${
                   activeTab === "register"
@@ -220,7 +220,7 @@ export default function RegisterPage() {
                 }`}
               >
                 Register
-              </button>
+              </button> */}
             </div>
 
             <h2 className="text-3xl font-bold mb-6 text-center bg-gradient-to-r from-[#FFACAC] to-white bg-clip-text text-transparent">
